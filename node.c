@@ -1,8 +1,10 @@
+// #include "../c_hashmap/hashmap.h"
 #include "serialize.h"
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,7 +13,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define TFAIL 600;
+#define TFAIL 30
+#define TCLEANUP 30
 
 void error(const char *msg) {
   perror(msg);
@@ -23,6 +26,7 @@ struct node {
   short port;
   int heartbeat;
   int local_time;
+  bool failed;
 };
 
 typedef struct node node;
@@ -39,7 +43,8 @@ node *create_node(char *ip, short p, int h, int l) {
 }
 
 void read_node(node *n) {
-  printf("%s:%i | %i | %i\n", n->ip, n->port, n->heartbeat, n->local_time);
+  printf("%s:%i | %i | %i | %i\n", n->ip, n->port, n->heartbeat, n->local_time,
+         n->failed);
 }
 
 struct network {
@@ -61,7 +66,7 @@ network *create_network(char *ip, short port) {
 void read_network(network *net) {
   printf("========================\n");
   printf("count is %i\n", net->count);
-  printf("ip:port | heartbeat | local_time\n");
+  printf("ip:port | heartbeat | local_time | failed\n");
   for (int i = 0; i < net->count; i++) {
     read_node(net->nodes[i]);
   }
@@ -73,42 +78,59 @@ void increment_heartbeat_and_time(network *net, int h, int l) {
   net->nodes[0]->local_time = l;
 }
 
-void update_network(network *current, network *new, int local_time) {
-  // this is n^2 but i'm too lazy to implement a hash table right now
-  int current_count = current->count;
+void mark_or_remove_entries(network *net, int local_time) {
+  for (int i = 0; i < net->count; i++) {
+    if (local_time > net->nodes[i]->local_time + TCLEANUP + TFAIL) {
+      // remove node
+    } else if (local_time > net->nodes[i]->local_time + TFAIL) {
+      // mark node as failed
+      net->nodes[i]->failed = true;
+    }
+  }
+}
 
+void update_network(network *current, network *new, int local_time) {
+
+  int found[new->count];
+  int missing = new->count;
+  // this is n^2 but i'm too lazy to implement a hash table right now
   for (int i = 0; i < new->count; i++) {
-    for (int j = 0; j < current_count; j++) {
+    for (int j = 0; j < current->count; j++) {
       // if ip & port exists in our current table...
       if (strcmp(new->nodes[i]->ip, current->nodes[j]->ip) == 0 &&
           new->nodes[i]->port == current->nodes[j]->port) {
-        if (new->nodes[i]->heartbeat > current->nodes[j]->heartbeat) {
-          // if the heartbeat is higher update the network with the current
-          // heartbeat
+        if (new->nodes[i]->heartbeat > current->nodes[j]->heartbeat &&
+            !current->nodes[j]->failed) {
+          // if the heartbeat is higher & the node hasn't failed update the
+          // network with the current heartbeat
           current->nodes[j]->heartbeat = new->nodes[i]->heartbeat;
           current->nodes[j]->local_time = local_time;
         }
-
+        found[i] = true;
+        missing--;
         break;
-      } else if (j == current_count - 1) {
-        // if we are on the last entry and the ip/ports don't match
-        // then the new entry is not in our network and we should add it
-
-        current->count++;
-
-        // int *ptr = realloc(&current->nodes, sizeof(node *) * current->count);
-        current->nodes =
-            realloc(current->nodes, sizeof(node *) * current->count);
-        // if (ptr) {
-        // current->nodes = ptr;
-        node *new_node = create_node(new->nodes[i]->ip, new->nodes[i]->port,
-                                     new->nodes[i]->heartbeat, local_time);
-        current->nodes[current->count - 1] = new_node;
-        //   free(ptr);
-        // } else {
-        //   free(current->nodes);
-        // }
       }
+    }
+  }
+
+  // no hash table means I have to do some hacky stuff...
+  // if we didn't find all the new entries we add the new entries in...
+  if (missing > 0) {
+    int index = current->count;
+    current->count += missing;
+    node **ptr = realloc(current->nodes, sizeof(node *) * current->count);
+    if (ptr) {
+      current->nodes = ptr;
+      for (int i = 0; i < new->count; i++) {
+        if (found[i] != true) {
+          node *new_node = create_node(new->nodes[i]->ip, new->nodes[i]->port,
+                                       new->nodes[i]->heartbeat, local_time);
+          current->nodes[index] = new_node;
+          index++;
+        }
+      }
+    } else {
+      perror("Error reallocating memory");
     }
   }
 }
@@ -269,6 +291,7 @@ int main(int argc, char **argv) {
       heartbeat++;
       local_time++;
       i = 0;
+      mark_or_remove_entries(net, local_time);
       increment_heartbeat_and_time(net, heartbeat, local_time);
       gossip(sockfd, net);
     }
