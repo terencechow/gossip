@@ -4,4 +4,3 @@ unsigned char *serialize_chars(unsigned char *buffer, char *value);
 
 int deserialize_int(unsigned char *buffer);
 short deserialize_short(unsigned char *buffer);
-unsigned char *deserialize_chars(unsigned char *buffer);

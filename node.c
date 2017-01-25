@@ -138,7 +138,7 @@ network *deserialize_network(unsigned char *buffer) {
   memset(ip, '\0', INET_ADDRSTRLEN);
   for (int i = 0; i < net->count; i++) {
 
-    ip = (char *)deserialize_chars(buffer + 4 + 26 * i);
+    ip = (char *)(buffer + 4 + 26 * i);
     node *n = create_node(ip, deserialize_short(buffer + 20 + 26 * i),
                           deserialize_int(buffer + 22 + 26 * i),
                           deserialize_int(buffer + 26 + 26 * i));
