@@ -301,6 +301,7 @@ int main(int argc, char **argv) {
       mark_or_remove_entries(net, local_time);
       increment_heartbeat_and_time(net, heartbeat, local_time);
       gossip(sockfd, net);
+      read_network(net);
     }
 
     int n;
@@ -331,9 +332,6 @@ int main(int argc, char **argv) {
       received = deserialize_network(buffer);
 
       update_network(net, received, local_time);
-
-      printf("Received UDP, Updated Network:\n");
-      read_network(net);
     }
   }
   // free the received network
