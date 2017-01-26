@@ -79,14 +79,21 @@ void increment_heartbeat_and_time(network *net, int h, int l) {
 }
 
 void mark_or_remove_entries(network *net, int local_time) {
+  int total_removed = 0;
   for (int i = 0; i < net->count; i++) {
-    if (local_time > net->nodes[i]->local_time + TCLEANUP + TFAIL) {
+    if (local_time >
+        net->nodes[i - total_removed]->local_time + TCLEANUP + TFAIL) {
       // remove node
-    } else if (local_time > net->nodes[i]->local_time + TFAIL) {
+      memmove(&net->nodes[i - total_removed],
+              &net->nodes[i - total_removed + 1],
+              sizeof(node *) * (net->count - i + total_removed - 1));
+      total_removed++;
+    } else if (local_time > net->nodes[i - total_removed]->local_time + TFAIL) {
       // mark node as failed
-      net->nodes[i]->failed = true;
+      net->nodes[i - total_removed]->failed = true;
     }
   }
+  net->count -= total_removed;
 }
 
 void update_network(network *current, network *new, int local_time) {
