@@ -129,7 +129,7 @@ void update_network(network *current, network *new, int local_time) {
     if (ptr) {
       current->nodes = ptr;
       for (int i = 0; i < new->count; i++) {
-        if (found[i] != true) {
+        if (found[i] != true && !new->nodes[i]->failed) {
           node *new_node = create_node(new->nodes[i]->ip, new->nodes[i]->port,
                                        new->nodes[i]->heartbeat, local_time);
           current->nodes[index] = new_node;
